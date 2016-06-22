@@ -60,7 +60,7 @@ use Scalar::Util qw(looks_like_number);
 #use Bio::EnsEMBL::Hive::DBSQL::DBConnection;   # causes warnings that all exported functions have been redefined
 
 use Exporter 'import';
-our @EXPORT_OK = qw(stringify destringify dir_revhash parse_cmdline_options find_submodules load_file_or_module script_usage split_for_bash go_figure_dbc find_dba_in_registry report_versions throw join_command_args);
+our @EXPORT_OK = qw(stringify destringify dir_revhash parse_cmdline_options find_submodules load_file_or_module script_usage split_for_bash go_figure_dbc go_figure_dba find_dba_in_registry report_versions throw join_command_args);
 
 no warnings ('once');   # otherwise the next line complains about $Carp::Internal being used just once
 $Carp::Internal{ (__PACKAGE__) }++;
@@ -302,6 +302,49 @@ sub split_for_bash {
 
     return @cmd;
 }
+
+
+=head2 go_figure_dba
+
+    Description: This function tries its best to build a DBAdaptor from $foo
+                 The second argument $dba_module is the module name that can be used to construct a new instance
+                 The third argument $reg_type is used by the Registry lookup code ($foo being the "species" name)
+
+=cut
+
+sub go_figure_dba {
+    my ($foo, $dba_module, $reg_type) = @_;
+
+
+    if(UNIVERSAL::isa($foo, $dba_module)) {   # it is already a Compara adaptor - just return it
+
+        return $foo;
+
+    } elsif(ref($foo) eq 'HASH') {  # simply a hash with connection parameters, plug them in:
+
+        return $dba_module->new( %$foo );
+
+    } elsif(ref($foo)) {
+
+        return $dba_module->new( -DBCONN => go_figure_dbc($foo) );
+
+    } elsif(!ref($foo) and $foo=~m{^\w*://}) {
+
+        return $dba_module->new( -url => $foo );
+
+    } else {
+
+        unless(ref($foo)) {    # maybe it is simply a registry key?
+            my $dba = find_dba_in_registry($foo, $reg_type);
+            if($dba) {
+                return $dba;
+            }
+        }
+
+        confess "Sorry, could not figure out how to make a $reg_type DBAdaptor out of $foo";
+    }
+}
+
 
 
 =head2 go_figure_dbc
