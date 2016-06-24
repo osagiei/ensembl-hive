@@ -101,7 +101,7 @@ package Bio::EnsEMBL::Hive::Process;
 use strict;
 use warnings;
 
-use Bio::EnsEMBL::Hive::Utils ('stringify', 'go_figure_dbc', 'join_command_args');
+use Bio::EnsEMBL::Hive::Utils ('stringify', 'go_figure_dbc', 'go_figure_dba', 'join_command_args');
 use Bio::EnsEMBL::Hive::Utils::Stopwatch;
 
 
@@ -421,18 +421,69 @@ sub dbc {
 =cut
 
 sub data_dbc {
-    my $self = shift @_;
+    my ($self, $foo) = @_;
+    return $self->get_cached_dbc('db_conn', undef, $foo);
+}
 
-    my $given_db_conn   = shift @_ || ($self->param_is_defined('db_conn') ? $self->param('db_conn') : $self);
-    my $given_ref = ref( $given_db_conn );
-    my $given_signature = ($given_ref eq 'ARRAY' or $given_ref eq 'HASH') ? stringify ( $given_db_conn ) : "$given_db_conn";
 
-    if( !$self->{'_cached_db_signature'} or ($self->{'_cached_db_signature'} ne $given_signature) ) {
-        $self->{'_cached_db_signature'} = $given_signature;
-        $self->{'_cached_data_dbc'} = go_figure_dbc( $given_db_conn );
+=head2 get_cached_dbc
+
+    Title   :   get_cached_dbc
+    Usage   :   my $data_dbc = $self->get_cached_dbc('db_conn');
+    Function:   returns a Bio::EnsEMBL::Hive::DBSQL::DBConnection object from the value held in $self->param($param_name) and the
+                previous calls to get_cached_dbc (with the same parameter name) to ensure that the same instance is reused through
+                calls. The DBConnection is created with go_figure_dbc in the first place.
+                Additional, optional, parameters include a registry type for registry lookups and $foo to make the function a setter
+    Returns :   Bio::EnsEMBL::Hive::DBSQL::DBConnection
+
+=cut
+
+sub get_cached_dbc {
+    my ($self, $param_name, $reg_type, $foo) = @_;
+    return $self->_get_cached_param($param_name, 'dbc', sub { return go_figure_dbc( $_[0], $reg_type ) }, $foo );
+}
+
+
+=head2 get_cached_dba
+
+    Title   :   get_cached_dba
+    Usage   :   my $compara_dba = $self->get_cached_dba('compara_db', 'Bio::EnsEMBL::Compara::DBSQL::DBAdaptor', 'compara');
+    Function:   returns an instance of $dba_module that fits the current $param_name parameter. This method will
+                cleverly cache the previous instances and reuse them (in case the value of $param_name changes between
+                jobs, for instance)
+                Additional, optional, parameters include a registry type for registry lookups and $foo to make the function a setter
+    Returns :   a DBAdaptor
+
+=cut
+
+sub get_cached_dba {
+    my ($self, $param_name, $dba_module, $reg_type, $foo) = @_;
+    return $self->_get_cached_param($param_name, 'dba', sub { return go_figure_dba( $_[0], $dba_module, $reg_type ) }, $foo );
+}
+
+
+=head2 _get_cached_param
+
+    Title   :   _get_cached_param
+    Function:   Calls $callback once and cache the return value so that further calls will return the same object
+
+=cut
+
+sub _get_cached_param {
+    my ($self, $param_name, $object_type, $callback, $foo) = @_;
+
+    my $given_param_value = $foo || ($self->param_is_defined($param_name) ? $self->param($param_name) : $self);
+    my $given_ref = ref( $given_param_value );
+    my $given_signature  = ($given_ref eq 'ARRAY' or $given_ref eq 'HASH') ? stringify ( $given_param_value ) : "$given_param_value";
+    my $key_signature = "_cached_${param_name}_${object_type}_signature";
+    my $key_value = "_cached_${param_name}_${object_type}_value";
+
+    if( !$self->{$key_signature} or ($self->{$key_signature} ne $given_signature) ) {
+        $self->{$key_signature} = $given_signature;
+        $self->{$key_value} = $callback->($given_param_value);
     }
 
-    return $self->{'_cached_data_dbc'};
+    return $self->{$key_value};
 }
 
 
