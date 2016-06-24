@@ -60,7 +60,7 @@ use Scalar::Util qw(looks_like_number);
 #use Bio::EnsEMBL::Hive::DBSQL::DBConnection;   # causes warnings that all exported functions have been redefined
 
 use Exporter 'import';
-our @EXPORT_OK = qw(stringify destringify dir_revhash parse_cmdline_options find_submodules load_file_or_module script_usage split_for_bash go_figure_dbc report_versions throw join_command_args);
+our @EXPORT_OK = qw(stringify destringify dir_revhash parse_cmdline_options find_submodules load_file_or_module script_usage split_for_bash go_figure_dbc find_dba_in_registry report_versions throw join_command_args);
 
 no warnings ('once');   # otherwise the next line complains about $Carp::Internal being used just once
 $Carp::Internal{ (__PACKAGE__) }++;
@@ -333,9 +333,28 @@ sub go_figure_dbc {
 
     } else {
         unless(ref($foo)) {    # maybe it is simply a registry key?
-            my $dba;
+            my $dba = find_dba_in_registry($foo, $reg_type);
+            if(UNIVERSAL::can($dba, 'dbc')) {
+                return bless $dba->dbc, 'Bio::EnsEMBL::Hive::DBSQL::DBConnection';
+            }
+        }
+        die "Sorry, could not figure out how to make a DBConnection object out of '$foo'";
+    }
+}
+
+
+=head2 find_dba_in_registry
+
+    Description: This function looks in the registry for a "species" named $foo. An additional $reg_type parameter
+                 can be given in case there are multiple adaptors for this species
+
+=cut
+
+sub find_dba_in_registry {
+    my ($foo, $reg_type) = @_;
 
             eval {
+                my $dba;
                 require Bio::EnsEMBL::Registry;
 
                 if($foo=~/^(\w+):(\w+)$/) {
@@ -343,24 +362,18 @@ sub go_figure_dbc {
                 }
 
                 if($reg_type) {
-                    $dba = Bio::EnsEMBL::Registry->get_DBAdaptor($foo, $reg_type);
+                    return Bio::EnsEMBL::Registry->get_DBAdaptor($foo, $reg_type);
                 } else {
                     my $dbas = Bio::EnsEMBL::Registry->get_all_DBAdaptors(-species => $foo);
 
                     if( scalar(@$dbas) == 1 ) {
-                        $dba = $dbas->[0];
+                        return $dbas->[0];
                     } elsif( @$dbas ) {
-                        warn "The registry contains multiple entries for '$foo', please prepend the reg_alias with the desired type";
+                        my $groups = join(", ", map {$_->group} @$dbas);
+                        warn "The registry contains multiple entries for '$foo', please prepend the foo with the desired type (one of '$groups')";
                     }
                 }
-            };
-
-            if(UNIVERSAL::can($dba, 'dbc')) {
-                return bless $dba->dbc, 'Bio::EnsEMBL::Hive::DBSQL::DBConnection';
             }
-        }
-        die "Sorry, could not figure out how to make a DBConnection object out of '$foo'";
-    }
 }
 
 

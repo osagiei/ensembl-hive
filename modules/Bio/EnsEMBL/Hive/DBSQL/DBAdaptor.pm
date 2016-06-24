@@ -44,7 +44,7 @@ use Bio::EnsEMBL::Hive;
 use Bio::EnsEMBL::Hive::HivePipeline;
 use Bio::EnsEMBL::Hive::DBSQL::DBConnection;
 use Bio::EnsEMBL::Hive::DBSQL::SqlSchemaAdaptor;
-use Bio::EnsEMBL::Hive::Utils ('throw');
+use Bio::EnsEMBL::Hive::Utils ('throw', 'find_dba_in_registry');
 use Bio::EnsEMBL::Hive::Utils::Collection;
 
 use Bio::EnsEMBL::Hive::MetaParameters;
@@ -80,24 +80,13 @@ sub new {
 
     } elsif($reg_alias) {
 
-        if($reg_alias=~/^(\w+):(\w+)$/) {
-            ($reg_type, $reg_alias) = ($1, $2);
+        $self = find_dba_in_registry($reg_alias, $reg_type);
+        if (!$self and !$reg_type) {
+            $self = Bio::EnsEMBL::Registry->get_DBAdaptor($reg_alias, 'hive');
         }
 
-        unless($reg_type) {     # if no $reg_type explicitly given, try to guess:
-            my $dbas = Bio::EnsEMBL::Registry->get_all_DBAdaptors(-species => $reg_alias);
-
-            if( scalar(@$dbas) == 1 ) {
-                $self = $dbas->[0];
-            } elsif( @$dbas ) {
-                warn "The registry contains multiple entries for '$reg_alias', please prepend the reg_alias with the desired type";
-            }
-        }
-
-        unless($self) {         # otherwise (or if not found) try a specific $reg_type
-            $reg_type ||= 'hive';
-            $self = Bio::EnsEMBL::Registry->get_DBAdaptor($reg_alias, $reg_type)
-                or die "Unable to connect to DBA using reg_conf='$reg_conf', reg_type='$reg_type', reg_alias='$reg_alias'\n";
+        unless($self) {
+            die "Unable to connect to DBA using reg_conf='$reg_conf', reg_type='$reg_type', reg_alias='$reg_alias'\n";
         }
 
         if( $self and !$self->isa($class) ) {   # if we found a non-Hive Registry entry, detach the $dbc and build a Hive dba around it:
