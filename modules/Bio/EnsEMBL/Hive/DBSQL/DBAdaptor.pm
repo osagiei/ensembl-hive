@@ -72,6 +72,10 @@ sub new {
         Bio::EnsEMBL::Registry->load_all($reg_conf);    # if undefined, default reg_conf will be used
     }
 
+    die "-dbconn cannot be used at the same time as -url, -reg_alias or -reg_type\n" if $dbc and ($url or $reg_alias or $reg_type);
+    die "-url cannot be used at the same time as -reg_alias or -reg_type\n" if $url and ($reg_alias or $reg_type);
+    die "-reg_type is useless in the absence of -reg_alias\n" if $reg_type and $reg_alias;
+
     my $self;
 
     if($url) {
