@@ -161,7 +161,14 @@ sub get_compiled_module_name {
     }
 
     eval "require $runnable_module_name";
-    die "The runnable module '$runnable_module_name' cannot be loaded or compiled:\n$@" if($@);
+#    die "The runnable module '$runnable_module_name' cannot be loaded or compiled:\n$@" if($@);
+    if ($@) {
+        if ($self->adaptor()) {
+            $self->adaptor()->db()->get_AnalysisStatsAdaptor()->update_status(
+                $self->dbID, 'EXCLUDED');
+        }
+        die "The runnable module '$runnable_module_name' cannot be loaded or compiled:\n$@";
+    }
     die "Problem accessing methods in '$runnable_module_name'. Please check that it inherits from Bio::EnsEMBL::Hive::Process and is named correctly.\n"
         unless($runnable_module_name->isa('Bio::EnsEMBL::Hive::Process'));
 
@@ -397,7 +404,7 @@ sub dataflow {
                         if( $funnel_job->status eq 'SEMAPHORED' ) {
                             $job_adaptor->increase_semaphore_count_for_jobid( $funnel_job_id, scalar(@$fan_jobs) );    # "pre-increase" the semaphore count before creating the dependent jobs
 
-                            $job_adaptor->db->get_LogMessageAdaptor->store_job_message($emitting_job->dbID, "Discovered and using an existing funnel ".$funnel_job->toString, 0);
+                            $job_adaptor->db->get_LogMessageAdaptor->store_job_message($emitting_job->dbID, "Discovered and using an existing funnel ".$funnel_job->toString, 'INFO');
                         } else {
                             die "The funnel job (id=$funnel_job_id) fetched from the database was not in SEMAPHORED status";
                         }
